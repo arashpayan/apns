@@ -11,7 +11,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"log"
 	"math/rand"
 	"net"
@@ -48,10 +47,6 @@ var apnsErrors map[int]string
 
 // Push commands always start with command value 2.
 const pushCommandValue = 2
-
-// ErrClientNotConnected indicates the user need to call Connect() on the
-// Client, due to never having connected or due to the connection erroring out.
-var ErrClientNotConnected = errors.New("Client not connected to APNs")
 
 // recentNotifications stores the last 25-50 notifications. When it gets full,
 // it gets resliced, so only the latest 25 are retained.
