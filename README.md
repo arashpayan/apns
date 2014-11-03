@@ -27,7 +27,6 @@ err := client.Connect()
 if err != nil {
     // handle the connection error
 }
-
 ```
 ### Create a Notification
 ```go
