@@ -9,7 +9,7 @@ your private key.
 
 Using
 
-To interact with the APNs, you must create a Clinet and connect it to the appropriate gateway. While your developing your Go app, you probably want to use the SandboxGateway.
+To interact with the APNs, you must create a Client and connect it to the appropriate gateway. While your developing your Go app, you probably want to use the SandboxGateway.
 
     client := apns.NewClient(apns.SandboxGateway, // or apns.ProductionGateway
         "/path/to/my/signed/cert/file.crt",
