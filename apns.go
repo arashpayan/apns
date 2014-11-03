@@ -1,3 +1,8 @@
+// Copyright 2014 Arash Payan. All rights reserved.
+// Use of this source code is governed by the Apache 2
+// license that can be found in the LICENSE file.
+
+// Package apns provides a client for using the Apple Push Notification service.
 package apns
 
 import (
@@ -12,6 +17,14 @@ import (
 	"net"
 	"time"
 )
+
+// ProductionGateway is the host address and port to pass NewClient for
+// connecting to the production APNs.
+const ProductionGateway = "gateway.push.apple.com:2195"
+
+// SandboxGateway is the host address and port to pass NewClient for
+// connecting to the development environment for the APNs.
+const SandboxGateway = "gateway.sandbox.push.apple.com:2195"
 
 // MaxPushNotificationBytes is the maximum number of bytes permitted in a payload
 // sent to the APNs
@@ -40,6 +53,8 @@ const pushCommandValue = 2
 // Client, due to never having connected or due to the connection erroring out.
 var ErrClientNotConnected = errors.New("Client not connected to APNs")
 
+// recentNotifications stores the last 25-50 notifications. When it gets full,
+// it gets resliced, so only the latest 25 are retained.
 var recentNotifications = make([]*Notification, 0, 50)
 
 // Notification represents a push notification for a specific iOS device
@@ -54,6 +69,7 @@ type Notification struct {
 	priority    uint8       `json:"-"`
 }
 
+// APNs error values sent from Apple when a notification has an error.
 const (
 	processingErrorID    = 1
 	missingDeviceTokenID = 2
@@ -82,16 +98,12 @@ func init() {
 	apnsErrors[noErrorID] = "None (unknown)"
 }
 
-// NewNotification creates an APNs notification
+// NewNotification creates an APNs notification that can be delivered to an iOS
+// device with the specified devToken.
 func NewNotification(devToken string) *Notification {
 	n := &Notification{deviceToken: devToken}
 	n.identifier = rand.New(rand.NewSource(time.Now().UnixNano())).Int31()
 	return n
-}
-
-// ToBytes returns the Notification as a slice of bytes for transfer to APNs
-func (n *Notification) ToBytes() []byte {
-	return nil
 }
 
 // Client is the broker between an APNs provider and the gateway
@@ -105,7 +117,15 @@ type Client struct {
 	invalidTokenHandler func(string)
 }
 
-// NewClient initializes a Client struct for you
+// NewClient initializes a Client struct that you can use to send Notifications
+// to the APNs. gateway should be either ProductionGateway or SandboxGateway.
+// certFile and keyFile are paths to your Apple signed certificate and private
+// key. invalidTokenHandler is a function that will be called when an attempt
+// send a notification results in an invalid token error from the APNs. When
+// you receive these errors, you should remove/disassociate the device token from
+// your database/user. This function callback is provided as a simpler alternative
+// to implementing a feedback service that would periodically poll Apple for
+// invalid tokens.
 func NewClient(gateway, certFile, keyFile string, invalidTokenHandler func(string)) *Client {
 	c := Client{Gateway: gateway, CertificateFile: certFile, KeyFile: keyFile}
 	c.notificationChan = make(chan *Notification, 4096) // 4096 oughtta be enough for anybody
@@ -134,7 +154,8 @@ func (c *Client) connect() error {
 	return nil
 }
 
-// Connect establishes a connection to the APNs gateway
+// Connect establishes a connection to the APNs gateway specified in NewClient().
+// This method blocks until the connection is established.
 func (c *Client) Connect() error {
 	err := c.connect()
 	if err != nil {
@@ -189,6 +210,9 @@ func (c *Client) Send(n *Notification) {
 	recentNotifications = append(recentNotifications, n)
 }
 
+// readErrors sits on the socket waiting for any errors from the APNs. If it
+// receives any data or an error, it will close the socket and report any
+// relevant errors.
 func (c *Client) readErrors() {
 	readBuf := make([]byte, 6, 6)
 	_, err := c.conn.Read(readBuf)
@@ -218,6 +242,8 @@ func (c *Client) readErrors() {
 	}
 }
 
+// processQueue pulls reads Notification objects out of a channel and tries to
+// send them to Apple for delivery to a device.
 func (c *Client) processQueue() {
 	for n := range c.notificationChan {
 		if !c.IsConnected {
