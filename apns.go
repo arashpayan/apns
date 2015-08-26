@@ -7,6 +7,7 @@ package apns
 
 import (
 	"bytes"
+	"container/list"
 	"crypto/tls"
 	"encoding/binary"
 	"encoding/hex"
@@ -14,6 +15,7 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -48,9 +50,17 @@ var apnsErrors map[int]string
 // Push commands always start with command value 2.
 const pushCommandValue = 2
 
-// recentNotifications stores the last 25-50 notifications. When it gets full,
-// it gets resliced, so only the latest 25 are retained.
-var recentNotifications = make([]*Notification, 0, 50)
+// gRecentNotifications stores recently sent notifications in case an error
+// is sent by Apple.
+var gRecents struct {
+	sync.Mutex
+	notifications *list.List
+}
+
+func init() {
+	log.Printf("initializing recents")
+	gRecents.notifications = list.New()
+}
 
 // Notification represents a push notification for a specific iOS device
 type Notification struct {
@@ -58,10 +68,10 @@ type Notification struct {
 	Badge       int16       `json:"badge"`
 	Sound       string      `json:"sound"`
 	AppData     interface{} `json:"-"`
-	deviceToken string      `json:"-"`
-	identifier  int32       `json:"-"`
-	expiry      uint32      `json:"-"`
-	priority    uint8       `json:"-"`
+	deviceToken string
+	identifier  int32
+	expiry      uint32
+	priority    uint8
 }
 
 // APNs error values sent from Apple when a notification has an error.
@@ -197,12 +207,19 @@ func (c *Client) Send(n *Notification) {
 	}
 	c.notificationChan <- n
 
-	// we want to keep a cache of the last 25 or 50 messages, in case we get an error
+	gRecents.Lock()
+	gRecents.notifications.PushFront(n)
+	gRecents.Unlock()
+
+	// we want to keep a cache of the recent messages, in case we get an error
 	// from Apple
-	if len(recentNotifications) >= 50 {
-		recentNotifications = recentNotifications[25:]
+	if gRecents.notifications.Len() > 200 {
+		gRecents.Lock()
+		for gRecents.notifications.Len() > 100 {
+			gRecents.notifications.Remove(gRecents.notifications.Back())
+		}
+		gRecents.Unlock()
 	}
-	recentNotifications = append(recentNotifications, n)
 }
 
 // readErrors sits on the socket waiting for any errors from the APNs. If it
@@ -225,11 +242,12 @@ func (c *Client) readErrors() {
 	// if this is an invalid device token error, notify the user
 	errID := int(readBuf[1])
 	if errID == invalidTokenID {
-		rn := recentNotifications // store a different pointer in case the slice gets changed
-		for i := len(rn) - 1; i >= 0; i-- {
-			n := rn[i]
+		gRecents.Lock()
+		for e := gRecents.notifications.Front(); e != nil; e = e.Next() {
+			n := e.Value.(Notification)
 			if n.identifier == id {
 				c.invalidTokenHandler(n.deviceToken)
+				break
 			}
 		}
 	} else {
