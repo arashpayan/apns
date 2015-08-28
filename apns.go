@@ -58,7 +58,6 @@ var gRecents struct {
 }
 
 func init() {
-	log.Printf("initializing recents")
 	gRecents.notifications = list.New()
 }
 
