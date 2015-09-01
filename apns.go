@@ -249,6 +249,7 @@ func (c *Client) readErrors() {
 				break
 			}
 		}
+		gRecents.Unlock()
 	} else {
 		log.Printf("Error received for notification %d - %v", id, apnsErrors[errID])
 	}
