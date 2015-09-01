@@ -243,7 +243,7 @@ func (c *Client) readErrors() {
 	if errID == invalidTokenID {
 		gRecents.Lock()
 		for e := gRecents.notifications.Front(); e != nil; e = e.Next() {
-			n := e.Value.(Notification)
+			n := e.Value.(*Notification)
 			if n.identifier == id {
 				c.invalidTokenHandler(n.deviceToken)
 				break
