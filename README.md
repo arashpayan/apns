@@ -1,3 +1,6 @@
+This project is no longer maintained. Check out [anachronistic/apns](https://github.com/anachronistic/apns) instead.
+--
+
 Introduction
 ------------
 This Go package provides a client that can establish a connection with the Apple Push Notification service and deliver notifications to end users based on a device token. This package has been implemented according to Apple's documentation (available at ever changing/breaking URLs).
